@@ -1,0 +1,17 @@
+/bin
+/cgroup
+/cneos
+/data
+/dev.tgz
+/etc
+/lib
+/lib32
+/lib64
+/license
+/mnt
+/opt
+/qemu
+/root
+/run
+/sbin
+/usr

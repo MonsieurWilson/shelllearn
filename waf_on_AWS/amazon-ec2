@@ -1,0 +1,71 @@
+#!/bin/sh
+
+# functions definition
+
+log() {
+    echo "$(date +"%Y-%m-%d %H:%M:%S")" $1 >> $2 2>&1
+}
+
+# scripts 
+
+mount -o rw,remount /
+
+LOG_FILE="/var/log/amazon-ec2.log"
+
+log "Initializing EC2 instance network." ${LOG_FILE}
+
+
+if [ -f /etc/conf.d/net ]; then
+
+    log " * Using saved /etc/conf.d/net configuration" ${LOG_FILE}
+    
+    ifcmd=$(cat /etc/conf.d/net | head -1)
+    
+    routecmd=$(cat /etc/conf.d/net | tail -1)
+    
+    ifconfig eth0 ${ifcmd} up
+    
+    route add default gw ${routecmd}
+    
+else
+    
+    log " * Using dhcp" ${LOG_FILE}
+
+    /bin/busybox udhcpc --quit --script=/opt/nsfocus/bin/udhcpc-hook.sh --now --interface=eth0 >> ${LOG_FILE} 2>&1
+
+    # ipaddr=$(ifconfig eth0 | grep 'inet ' | awk '{print $2}' | awk -F ':' '{print $2}')
+
+    # netmask=$(ifconfig eth0 | grep 'Mask' | awk -F ':' '{print $4}')
+
+    # gateway=$(ip route | grep "^default" | tail -1 | awk '{print $3}')
+
+    ipaddr=$(ifconfig eth0 | head -2 | tail -1 | cut -d ':' -f 2 | cut -d ' ' -f 1)
+    
+    netmask=$(ifconfig eth0 | head -2 | tail -1 | cut -d ':' -f 4)
+    
+    gateway=$(route -n | grep "^0.0.0.0" | tail -1 | awk '{print $2}')
+    
+    echo "${ipaddr} netmask ${netmask}" > /etc/conf.d/net
+    
+    echo "${gateway}" >> /etc/conf.d/net
+    
+fi      
+
+log "Fetching metadata from EC2 servers" ${LOG_FILE}
+
+instance_id=$(wget -t 2 -T 5 -q -O - http://169.254.169.254/latest/meta-data/instance-id)
+
+[ -f "/etc/conf.d/instance_id" ] && [ "$(cat /etc/conf.d/instance_id)" = "${instance_id}" ] && exit 0
+
+echo "${instance_id}" > "/etc/conf.d/instance_id"
+
+hostname=$(wget -t 2 -T 5 -q -O - http://169.254.169.254/latest/meta-data/local-hostname)
+
+echo "HOSTNAME=${hostname}" > /etc/conf.d/hostname
+
+log " * hostname = ${hostname}" ${LOG_FILE}
+
+log " * instance_id = ${instance_id}" ${LOG_FILE}
+
+
+log "EC2 Instance network Initialization has finished." ${LOG_FILE}
